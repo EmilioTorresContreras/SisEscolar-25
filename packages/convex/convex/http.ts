@@ -3,6 +3,7 @@ import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { WebhookEvent } from "@clerk/backend";
 import { Webhook } from "svix";
+import Stripe from "stripe";
 
 const http = httpRouter();
 
@@ -65,6 +66,87 @@ async function validateRequest(req: Request): Promise<WebhookEvent | null> {
     console.error("Error verifying webhook event", error);
     return null;
   }
+}
+
+// Stripe 
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: "2025-07-30.basil",
+});
+
+http.route({
+  path: "/subscription-webhook",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const sig = request.headers.get("stripe-signature");
+      if (!sig) throw new Error("Falta la firma de Stripe");
+
+      // Obtener el cuerpo de la petición como texto sin procesar para preservar el formato exacto
+      const body = await request.text();
+      
+      // Limpiar el webhook secret de espacios en blanco
+      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
+      if (!webhookSecret) {
+        throw new Error("STRIPE_WEBHOOK_SECRET no está configurado");
+      }
+      
+      const event = await stripe.webhooks.constructEventAsync(
+        body,
+        sig,
+        webhookSecret
+      );
+
+      console.log("✅ Evento Stripe recibido:", event.type);
+
+      switch (event.type) {
+        case "checkout.session.completed":
+          await handleCheckoutSessionCompleted(ctx, event.data.object);
+          break;
+        case "invoice.payment_succeeded":
+          // await handleInvoicePaymentSucceeded(ctx, event.data.object);
+          break;
+        case "customer.subscription.deleted":
+          // await handleSubscriptionDeleted(ctx, event.data.object);
+          break;
+        case "customer.subscription.updated":
+          // await handleSubscriptionUpdated(ctx, event.data.object);
+          break;
+        default:
+          console.log(`⚠️ Evento no manejado: ${event.type}`);
+      }
+
+      return new Response(null, { status: 200 });
+    } catch (error) {
+      console.error("Error processing webhook:", error);
+      return new Response("Internal server error", { status: 500 });
+    }
+  }),
+});
+
+async function handleCheckoutSessionCompleted(ctx: any, session: Stripe.Checkout.Session) {
+  console.log("✅ checkout.session.completed");
+
+  const { customer, subscription, metadata } = session;
+  if (!metadata?.schoolId || !metadata?.userId || !subscription) {
+    throw new Error("Faltan datos necesarios en checkout session");
+  }
+
+  const subscriptionDetails = await stripe.subscriptions.retrieve(subscription as string);
+  const plan = subscriptionDetails.items.data[0]?.price;
+  console.log(session)
+  
+  // Corregir la referencia a la función de API
+  await ctx.runMutation(internal.functions.schoolSubscriptions.saveSubscription, {
+    schoolId: metadata.schoolId,
+    userId: metadata.userId,
+    stripeCustomerId: customer as string,
+    stripeSubscriptionId: subscription as string,
+    currency: plan?.currency || "usd",
+    plan: plan?.id || "unknown",
+    status: "trialing",
+    currentPeriodStart: subscriptionDetails.created,
+    currentPeriodEnd: session.expires_at,
+  });
 }
 
 export default http;
