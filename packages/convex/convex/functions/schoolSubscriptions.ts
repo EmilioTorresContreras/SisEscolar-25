@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, mutation } from "../_generated/server";
+import { internalMutation } from "../_generated/server";
 
 export const saveSubscription = internalMutation({
   args: {
@@ -40,7 +40,7 @@ export const saveSubscription = internalMutation({
       stripeSubscriptionId: args.stripeSubscriptionId,
       currency: args.currency,
       plan: args.plan,
-      status: "active",
+      status: args.status,
       currentPeriodStart: args.currentPeriodStart,
       currentPeriodEnd: args.currentPeriodEnd,
       createdAt: Date.now(),
@@ -49,7 +49,7 @@ export const saveSubscription = internalMutation({
   },
 });
 
-export const updateSubscription = mutation({
+export const updateSubscription = internalMutation({
   args: {
     stripeSubscriptionId: v.string(),
     status: v.union(
@@ -59,11 +59,6 @@ export const updateSubscription = mutation({
       v.literal("trialing"),
       v.literal("inactive")
     ),
-    currency: v.optional(v.string()),
-    plan: v.optional(v.string()),
-    currentPeriodStart: v.optional(v.number()),
-    currentPeriodEnd: v.optional(v.number()),
-    stripeCustomerId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const subscription = await ctx.db
@@ -79,12 +74,6 @@ export const updateSubscription = mutation({
       status: args.status,
       updatedAt: Date.now()
     };
-
-    if (args.currency) updateData.currency = args.currency;
-    if (args.plan) updateData.plan = args.plan;
-    if (args.currentPeriodStart) updateData.currentPeriodStart = args.currentPeriodStart;
-    if (args.currentPeriodEnd) updateData.currentPeriodEnd = args.currentPeriodEnd;
-    if (args.stripeCustomerId) updateData.stripeCustomerId = args.stripeCustomerId;
 
     await ctx.db.patch(subscription._id, updateData);
   },

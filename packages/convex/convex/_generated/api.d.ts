@@ -25,7 +25,6 @@ import type * as functions_users from "../functions/users.js";
 import type * as gradeRubrics from "../gradeRubrics.js";
 import type * as grades from "../grades.js";
 import type * as http from "../http.js";
-import type * as subscriptionWebhook from "../subscriptionWebhook.js";
 import type * as termAverages from "../termAverages.js";
 import type * as terms from "../terms.js";
 
@@ -50,7 +49,6 @@ declare const fullApi: ApiFromModules<{
   gradeRubrics: typeof gradeRubrics;
   grades: typeof grades;
   http: typeof http;
-  subscriptionWebhook: typeof subscriptionWebhook;
   termAverages: typeof termAverages;
   terms: typeof terms;
 }>;
